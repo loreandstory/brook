@@ -8,7 +8,7 @@ enum TransactionKind {
 }
 
 #[derive(Clone, Debug)]
-struct Transaction {
+pub struct Transaction {
     date: DateTime<Utc>,
     kind: TransactionKind,
     amount: f32,
@@ -47,51 +47,75 @@ impl Transaction {
         }
     }
 
-    fn withdrawal(amount: f32, fund: String, entity: String, description: String) -> Self {
+    pub fn withdrawal(amount: f32, fund: String, entity: String, description: String) -> Self {
         Transaction::new(Utc::now(), TransactionKind::Withdrawal, amount, fund, entity, description)
     }
 
-    fn deposit(amount: f32, fund: String, entity: String, description: String) -> Self {
+    pub fn deposit(amount: f32, fund: String, entity: String, description: String) -> Self {
         Transaction::new(Utc::now(), TransactionKind::Deposit, amount, fund, entity, description)
     }
 
 }
 
-struct Funds(f32);
+pub struct Amount(pub f32);
 
-impl Funds {
-    fn deposit(&mut self, amount: f32) {
+impl Amount {
+    pub fn deposit(&mut self, amount: f32) {
         // normal add, but done with proper rounding for money
         self.0 = ((100.0 * self.0).round() + (100.0 * amount).round()) / 100.0;
     }
 
-    fn withdraw(&mut self, amount: f32) {
+    pub fn withdraw(&mut self, amount: f32) {
         // normal subtract, but done with proper rounding for money
         self.0 = ((100.0 * self.0).round() - (100.0 * amount).round()) / 100.0;
 
     }
 }
 
-struct Fund {
+pub struct Fund {
     name: String,
-    amount: Funds
+    amount: Amount,
 }
 
-struct Account {
-    balance: Funds,
+impl Fund {
+    pub fn new(name: String, amount: Amount) -> Self {
+      Fund { name, amount }
+    }
+}
+
+impl fmt::Display for Fund {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, ""
+        )
+    }
+}
+
+pub struct Account {
+    name: String,
+    starting_amount: Amount,
+    balance: Amount,
     funds: Vec<Fund>,
-    transactions: Vec<Transaction>
+    transactions: Vec<Transaction>,
+    future_transactions: Vec<Transaction>,
 }
 
 impl Account {
-    fn setup_fund(&mut self, fund: Fund) {
-        self.funds.push(fund);
+    pub fn new(name: String, starting_amount: Amount, funds: Vec<Fund>, transactions: Vec<Transaction>, future_transactions: Vec<Transaction>) -> Account {
+        let new_account = Account {
+          name,
+          starting_amount,
+          balance: Amount(0.00),
+          funds,
+          transactions,
+          future_transactions,
+        };
+
+        new_account.setup();
+        new_account
     }
 
-    fn setup_funds(&mut self, funds: Vec<Fund>) {
-        for fund in funds {
-            self.setup_fund(fund);
-        }
+    pub fn add_fund(&mut self, fund: Fund) {
+        self.funds.push(fund);
     }
 
     fn index_of_fund_with_name(&self, name: &String) -> usize {
@@ -107,7 +131,11 @@ impl Account {
         counter
     }
 
-    fn process_transaction(&mut self, transaction: Transaction) {
+    pub fn add_transaction(&mut self, transaction: Transaction) {
+        self.transactions.push(transaction);
+    }
+
+    fn process_transaction(&mut self, transaction: &Transaction) {
         let funds_index = self.index_of_fund_with_name(&transaction.fund);
 
         match &transaction.kind {
@@ -123,20 +151,27 @@ impl Account {
                 //TODO: implement handling funds: Vec<Funds>
             }
         }
-
-        self.transactions.push(transaction);
     }
 
-    fn process_transactions(&mut self, transactions: Vec<Transaction>) {
-        for transaction in transactions {
+    pub fn process_transactions(&mut self) {
+        for transaction in &self.transactions {
             self.process_transaction(transaction);
         }
     }
 
-    fn transfer(&mut self, to_transfer: Transaction, to_account: &mut Account) {
-        let clone_t = to_transfer.clone();
-        self.process_transaction(to_transfer);
-        to_account.process_transaction(clone_t);
+    pub fn setup(&mut self) {
+        self.process_transactions();
+    }
+
+    pub fn transfer(&mut self, to_transfer: Transaction, to_account: &mut Account) {
+        self.process_transaction(&to_transfer);
+        to_account.process_transaction(&to_transfer);
+    }
+
+    pub fn print(&self) {
+      println!("\n# {}", self.name);
+      println!("\n# {}", self.name);
+      println!("\n---\n");
     }
 }
 
