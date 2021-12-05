@@ -72,20 +72,41 @@ impl Amount {
     }
 }
 
+enum FundKind {
+  Budget,
+  Savings,
+}
+
 pub struct Fund {
     name: String,
+    kind: FundKind,
     amount: Amount,
+    goal: f32,
 }
 
 impl Fund {
-    pub fn new(name: String, amount: Amount) -> Self {
-      Fund { name, amount }
+    fn new(name: String, kind: FundKind, amount: Amount, goal: f32) -> Self {
+      Fund {
+          name,
+          kind,
+          amount,
+          goal,
+      }
+    }
+
+    pub fn budget(name: String, amount: Amount) -> Self {
+        Fund::new(name, FundKind::Budget, amount, 0.00)
+    }
+
+    pub fn savings(name: String, goal: f32) -> Self {
+        Fund::new(name, FundKind::Savings, Amount(0.00), goal)
     }
 }
 
 impl fmt::Display for Fund {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, ""
+        write!(f, "{}",
+            format!("[{0:=>1$}{2:>3$}", ">", 10, "]", 5),
         )
     }
 }
@@ -101,7 +122,7 @@ pub struct Account {
 
 impl Account {
     pub fn new(name: String, starting_amount: Amount, funds: Vec<Fund>, transactions: Vec<Transaction>, future_transactions: Vec<Transaction>) -> Account {
-        let new_account = Account {
+        let mut new_account = Account {
           name,
           starting_amount,
           balance: Amount(0.00),
@@ -155,7 +176,21 @@ impl Account {
 
     pub fn process_transactions(&mut self) {
         for transaction in &self.transactions {
-            self.process_transaction(transaction);
+            let funds_index = self.index_of_fund_with_name(&transaction.fund);
+
+            match &transaction.kind {
+                TransactionKind::Withdrawal => {
+                    self.balance.withdraw(transaction.amount);
+                    self.funds[funds_index].amount.withdraw(transaction.amount);
+                    //TODO: implement handling funds: Vec<Funds>
+                },
+
+                TransactionKind::Deposit => {
+                    self.balance.deposit(transaction.amount);
+                    self.funds[funds_index].amount.deposit(transaction.amount);
+                    //TODO: implement handling funds: Vec<Funds>
+                }
+            }
         }
     }
 
@@ -170,7 +205,9 @@ impl Account {
 
     pub fn print(&self) {
       println!("\n# {}", self.name);
-      println!("\n# {}", self.name);
+      for fund in &self.funds {
+          println!("\n# {}", fund);
+      }
       println!("\n---\n");
     }
 }
