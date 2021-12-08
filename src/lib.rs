@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use std::fmt;
 
 #[derive(Clone, Debug)]
@@ -9,7 +8,7 @@ enum TransactionKind {
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
-    date: DateTime<Utc>,
+    date: String,
     kind: TransactionKind,
     amount: f32,
     fund: String,
@@ -24,10 +23,9 @@ impl fmt::Display for Transaction {
             TransactionKind::Deposit => "+"
         };
 
-        write!(f, "{}\t{}{}\t{}\t{}\t{}",
-            self.date.format("%a %b %e %Y"),
-            transaction_kind,
-            self.amount,
+        write!(f, "{}  {:>9}  {:<15}  {:<15}  {:<25}",
+            self.date,
+            format!("{}{:.2}", transaction_kind, self.amount),
             self.fund,
             self.entity,
             self.description,
@@ -36,7 +34,7 @@ impl fmt::Display for Transaction {
 }
 
 impl Transaction {
-    fn new(date: DateTime<Utc>, kind: TransactionKind, amount: f32, fund: String, entity: String, description: String)  -> Self {
+    fn new(date: String, kind: TransactionKind, amount: f32, fund: String, entity: String, description: String)  -> Self {
         Transaction {
             date,
             kind,
@@ -47,12 +45,12 @@ impl Transaction {
         }
     }
 
-    pub fn withdrawal(amount: f32, fund: String, entity: String, description: String) -> Self {
-        Transaction::new(Utc::now(), TransactionKind::Withdrawal, amount, fund, entity, description)
+    pub fn withdrawal(date: String, amount: f32, fund: String, entity: String, description: String) -> Self {
+        Transaction::new(date, TransactionKind::Withdrawal, amount, fund, entity, description)
     }
 
-    pub fn deposit(amount: f32, fund: String, entity: String, description: String) -> Self {
-        Transaction::new(Utc::now(), TransactionKind::Deposit, amount, fund, entity, description)
+    pub fn deposit(date: String, amount: f32, fund: String, entity: String, description: String) -> Self {
+        Transaction::new(date, TransactionKind::Deposit, amount, fund, entity, description)
     }
 }
 
@@ -74,55 +72,71 @@ impl Amount {
 enum FundKind {
   Budget,
   Savings,
-}
-
-impl fmt::Display for FundKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let fund_type: String = match self {
-            FundKind::Budget => String::from("Budget"),
-            FundKind::Savings => String::from("Savings"),
-        };
-
-        write!(f, "{}", fund_type)
-    }
+  Income,
 }
 
 pub struct Fund {
     name: String,
     kind: FundKind,
     current_amount: Amount,
-    start_and_end_amounts: (f32, f32),
+    begin_with_sum: f32,
+    end_with_sum: f32,
 }
 
 impl Fund {
-    fn new(name: String, kind: FundKind, starting_amount: f32, ending_amount: f32) -> Self {
+    fn new(name: String, kind: FundKind, begin_with_sum: f32, end_with_sum: f32) -> Self {
         Fund {
-          name,
-          kind,
-          current_amount: Amount(starting_amount),
-          start_and_end_amounts: (starting_amount, ending_amount),
+            name,
+            kind,
+            current_amount: Amount(begin_with_sum),
+            begin_with_sum,
+            end_with_sum,
         }
     }
 
-    pub fn budget(name: String, starting_amount: f32) -> Self {
-        Fund::new(name, FundKind::Budget, starting_amount, 0.00)
+    fn sum_status_out_of_20(&self) -> usize {
+        let fraction = match self.kind {
+            FundKind::Budget => {
+                20.0 * (self.begin_with_sum - self.current_amount.0) / self.begin_with_sum
+            },
+
+            FundKind::Savings => {
+                20.0 - 20.0 * (self.end_with_sum - self.current_amount.0) / (self.end_with_sum - self.begin_with_sum)
+            },
+
+            FundKind::Income => {
+                20.0 * self.current_amount.0 / self.end_with_sum
+            },
+        };
+
+        fraction as usize
     }
 
-    pub fn savings(name: String, starting_amount: f32, amount_to_add: f32) -> Self {
-        Fund::new(name, FundKind::Savings, starting_amount, starting_amount + amount_to_add)
+    pub fn budget(name: String, begin_with_sum: f32) -> Self {
+        Fund::new(name, FundKind::Budget, begin_with_sum, 0.00)
+    }
+
+    pub fn savings(name: String, begin_with_sum: f32, increase_by_sum: f32) -> Self {
+        Fund::new(name, FundKind::Savings, begin_with_sum, begin_with_sum + increase_by_sum)
+    }
+
+    pub fn income(name: String, end_with_sum: f32) -> Self {
+        Fund::new(name, FundKind::Income, 0.00, end_with_sum)
     }
 }
 
 impl fmt::Display for Fund {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:>9.2} {} {:<9.2} {} {}\n{:.2}",
-            self.start_and_end_amounts.0,
-            // print balance
-            format!("[{0:=>1$}{2:>3$}", ">", 10, "]", 5),
-            self.start_and_end_amounts.1,
-            self.kind,
+        write!(f, "{:<15}{:>12.2} {} {:<12.2}\n{:>5$.2}",
             self.name,
+            self.begin_with_sum,
+            // print balance
+            format!("[{0:=>1$}{2:>3$}",
+                 ">", self.sum_status_out_of_20(),
+                 "]", 20 -self.sum_status_out_of_20()),
+            self.end_with_sum,
             self.current_amount.0,
+            35 + self.sum_status_out_of_20(),
         )
     }
 }
@@ -173,18 +187,18 @@ impl Account {
     }
 
     fn process_transaction(&mut self, transaction: &Transaction) {
-        let funds_index = self.index_of_fund_with_name(&transaction.fund);
+        let fund_index = self.index_of_fund_with_name(&transaction.fund);
 
         match &transaction.kind {
             TransactionKind::Withdrawal => {
                 self.balance.withdraw(transaction.amount);
-                self.funds[funds_index].current_amount.withdraw(transaction.amount);
+                self.funds[fund_index].current_amount.withdraw(transaction.amount);
                 //TODO: implement handling funds: Vec<Funds>
             },
 
             TransactionKind::Deposit => {
                 self.balance.deposit(transaction.amount);
-                self.funds[funds_index].current_amount.deposit(transaction.amount);
+                self.funds[fund_index].current_amount.deposit(transaction.amount);
                 //TODO: implement handling funds: Vec<Funds>
             }
         }
@@ -192,18 +206,18 @@ impl Account {
 
     pub fn process_transactions(&mut self) {
         for transaction in &self.transactions {
-            let funds_index = self.index_of_fund_with_name(&transaction.fund);
+            let fund_index = self.index_of_fund_with_name(&transaction.fund);
 
             match &transaction.kind {
                 TransactionKind::Withdrawal => {
                     self.balance.withdraw(transaction.amount);
-                    self.funds[funds_index].current_amount.withdraw(transaction.amount);
+                    self.funds[fund_index].current_amount.withdraw(transaction.amount);
                     //TODO: implement handling funds: Vec<Funds>
                 },
 
                 TransactionKind::Deposit => {
                     self.balance.deposit(transaction.amount);
-                    self.funds[funds_index].current_amount.deposit(transaction.amount);
+                    self.funds[fund_index].current_amount.deposit(transaction.amount);
                     //TODO: implement handling funds: Vec<Funds>
                 }
             }
@@ -221,35 +235,24 @@ impl Account {
 
     pub fn print(&self) {
       println!("\n# {}", self.name);
+      println!("Current Balance: {:.2}", self.balance.0);
+
+      println!("\n\n    Funds");
+      println!("    -----");
+
       for fund in &self.funds {
-          println!("\n {}", fund);
+          println!("\n    {}", fund);
       }
+
+      println!("\n\n    Transactions");
+      println!("    ------------");
+
+      for transaction in &self.transactions {
+          println!("    {}", transaction);
+      }
+
       println!("\n---\n");
     }
 }
 
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn can_create_new_withdrawal() {
-        let withdrawal = Transaction::withdrawal(18.34, String::from("Groceries"), String::from("HEB"), String::from("For kishik"));
-        // TODO: use matches and Result so ensure date and kind are correct as well.
-        assert_eq!(18.34, withdrawal.amount);
-        assert_eq!(String::from("Groceries"), withdrawal.fund);
-        assert_eq!(String::from("HEB"), withdrawal.entity);
-        assert_eq!(String::from("For kishik"), withdrawal.description);
-    }
-
-    #[test]
-    fn can_create_new_deposit() {
-        let deposit = Transaction::deposit(18.34, String::from("Groceries"), String::from("HEB"), String::from("For kishik"));
-        // TODO: use matches and Result so ensure date and kind are correct as well.
-        assert_eq!(18.34, deposit.amount);
-        assert_eq!(String::from("Groceries"), deposit.fund);
-        assert_eq!(String::from("HEB"), deposit.entity);
-        assert_eq!(String::from("For kishik"), deposit.description);
-    }
-}
