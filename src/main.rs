@@ -2,9 +2,9 @@ use brook::*;
 
 fn main() {
     let funds = vec![
-        Fund::budget(String::from("Groceries"), Amount(200.00)),
-        Fund::budget(String::from("Gas"), Amount(50.00)),
-        Fund::savings(String::from("Emergency Fund"), 500.00),
+        Fund::budget(String::from("Groceries"), 200.00),
+        Fund::budget(String::from("Gas"), 50.00),
+        Fund::savings(String::from("Emergency Fund"), 500.00, 200.00),
     ];
 
     let transactions = vec![

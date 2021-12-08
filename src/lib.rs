@@ -54,7 +54,6 @@ impl Transaction {
     pub fn deposit(amount: f32, fund: String, entity: String, description: String) -> Self {
         Transaction::new(Utc::now(), TransactionKind::Deposit, amount, fund, entity, description)
     }
-
 }
 
 pub struct Amount(pub f32);
@@ -77,36 +76,53 @@ enum FundKind {
   Savings,
 }
 
+impl fmt::Display for FundKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let fund_type: String = match self {
+            FundKind::Budget => String::from("Budget"),
+            FundKind::Savings => String::from("Savings"),
+        };
+
+        write!(f, "{}", fund_type)
+    }
+}
+
 pub struct Fund {
     name: String,
     kind: FundKind,
-    amount: Amount,
-    goal: f32,
+    current_amount: Amount,
+    start_and_end_amounts: (f32, f32),
 }
 
 impl Fund {
-    fn new(name: String, kind: FundKind, amount: Amount, goal: f32) -> Self {
-      Fund {
+    fn new(name: String, kind: FundKind, starting_amount: f32, ending_amount: f32) -> Self {
+        Fund {
           name,
           kind,
-          amount,
-          goal,
-      }
+          current_amount: Amount(starting_amount),
+          start_and_end_amounts: (starting_amount, ending_amount),
+        }
     }
 
-    pub fn budget(name: String, amount: Amount) -> Self {
-        Fund::new(name, FundKind::Budget, amount, 0.00)
+    pub fn budget(name: String, starting_amount: f32) -> Self {
+        Fund::new(name, FundKind::Budget, starting_amount, 0.00)
     }
 
-    pub fn savings(name: String, goal: f32) -> Self {
-        Fund::new(name, FundKind::Savings, Amount(0.00), goal)
+    pub fn savings(name: String, starting_amount: f32, amount_to_add: f32) -> Self {
+        Fund::new(name, FundKind::Savings, starting_amount, starting_amount + amount_to_add)
     }
 }
 
 impl fmt::Display for Fund {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}",
+        write!(f, "{:>9.2} {} {:<9.2} {} {}\n{:.2}",
+            self.start_and_end_amounts.0,
+            // print balance
             format!("[{0:=>1$}{2:>3$}", ">", 10, "]", 5),
+            self.start_and_end_amounts.1,
+            self.kind,
+            self.name,
+            self.current_amount.0,
         )
     }
 }
@@ -162,13 +178,13 @@ impl Account {
         match &transaction.kind {
             TransactionKind::Withdrawal => {
                 self.balance.withdraw(transaction.amount);
-                self.funds[funds_index].amount.withdraw(transaction.amount);
+                self.funds[funds_index].current_amount.withdraw(transaction.amount);
                 //TODO: implement handling funds: Vec<Funds>
             },
 
             TransactionKind::Deposit => {
                 self.balance.deposit(transaction.amount);
-                self.funds[funds_index].amount.deposit(transaction.amount);
+                self.funds[funds_index].current_amount.deposit(transaction.amount);
                 //TODO: implement handling funds: Vec<Funds>
             }
         }
@@ -181,13 +197,13 @@ impl Account {
             match &transaction.kind {
                 TransactionKind::Withdrawal => {
                     self.balance.withdraw(transaction.amount);
-                    self.funds[funds_index].amount.withdraw(transaction.amount);
+                    self.funds[funds_index].current_amount.withdraw(transaction.amount);
                     //TODO: implement handling funds: Vec<Funds>
                 },
 
                 TransactionKind::Deposit => {
                     self.balance.deposit(transaction.amount);
-                    self.funds[funds_index].amount.deposit(transaction.amount);
+                    self.funds[funds_index].current_amount.deposit(transaction.amount);
                     //TODO: implement handling funds: Vec<Funds>
                 }
             }
@@ -206,7 +222,7 @@ impl Account {
     pub fn print(&self) {
       println!("\n# {}", self.name);
       for fund in &self.funds {
-          println!("\n# {}", fund);
+          println!("\n {}", fund);
       }
       println!("\n---\n");
     }
